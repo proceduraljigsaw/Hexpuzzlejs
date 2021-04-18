@@ -62,16 +62,10 @@
             } else {
                var sextants = [3, 2, 4, -1, -1, 1, 5, -1, 0];
             }
-
-
-
-
             this._sextant = sextants[index];
-
-
          }
          eq(other) {
-            return (this === other) || (this.p1.eq(other.p1) && this.p2.eq(other.p2));
+            return (this === other) || (this.p1.eq(other.p1) && this.p2.eq(other.p2)) || (this.p1.eq(other.p2) && this.p2.eq(other.p1));
          }
          get slope() {
             return this._slope;
@@ -89,16 +83,13 @@
 
          static FromPointAndSextant(p1, sextant) {
             var p2;
-            if (Math.abs(p1.x)% 2) {
+            if (Math.abs(p1.x) % 2) {
                var increments = [[2, 0], [1, 0], [-1, 0], [-2, 0], [-1, 1], [1, 1]];
             } else {
                var increments = [[2, 0], [1, -1], [-1, -1], [-2, 0], [-1, 0], [1, 0]];
             }
             p2 = new Tile(p1.x + increments[sextant][0], p1.y + increments[sextant][1]);
             var con = new DiagonalConnection(p1, p2);
-            if (con.sextant != sextant) {
-               console.log("EPIC FAIL");
-            }
             return con;
          }
       }
@@ -179,10 +170,10 @@
                this._sp = pb;
                this._ep = pa;
             }
-            console.log(gcx+ " "+gcy+" Center " + this._cpx + " " + this._cpy + " sext " + this.sextant + " sp " + this._sp.str() + " ep " + this._ep.str());
+            //console.log(gcx + " " + gcy + " Center " + this._cpx + " " + this._cpy + " sext " + this.sextant + " sp " + this._sp.str() + " ep " + this._ep.str());
          }
          eq(a) {
-            return (this.quad == a.quad && this.cp.eq(a.cp));
+            return (this.sextant == a.sextant && this.cp.eq(a.cp));
          }
          get cp() {
             return new Tile(this._cpx, this._cpy);
@@ -206,52 +197,33 @@
             this.ncols = ncols;
             this.nrows = nrows;
             this.grid = new TileGrid(ncols, nrows)
-            this.pieces = [
-            [ DiagonalConnection.FromPointAndSextant(new Tile(2,1),0)],
-            [ DiagonalConnection.FromPointAndSextant(new Tile(6,1),1)],
-            [ DiagonalConnection.FromPointAndSextant(new Tile(10,1),2)],
-            [ DiagonalConnection.FromPointAndSextant(new Tile(14,1),3)],
-            [ DiagonalConnection.FromPointAndSextant(new Tile(18,1),4)],
-            [ DiagonalConnection.FromPointAndSextant(new Tile(22,1),5)],
-
-            [ DiagonalConnection.FromPointAndSextant(new Tile(3,4),0)],
-            [ DiagonalConnection.FromPointAndSextant(new Tile(7,4),1)],
-            [ DiagonalConnection.FromPointAndSextant(new Tile(11,4),2)],
-            [ DiagonalConnection.FromPointAndSextant(new Tile(15,4),3)],
-            [ DiagonalConnection.FromPointAndSextant(new Tile(19,4),4)],
-            [ DiagonalConnection.FromPointAndSextant(new Tile(23,4),5)],
-            
-            // [ new DiagonalConnection(new Tile(0, 0), new Tile(1, 0))],
-            // [ new DiagonalConnection(new Tile(0, 0), new Tile(1, 0))],
-            // [ new DiagonalConnection(new Tile(0, 0), new Tile(1, 0))],
-            // [ new DiagonalConnection(new Tile(0, 0), new Tile(1, 0))],
-         
-         ];
+            this.pieces = [];
             this.maxpiecelen = maxpiecelen;
             this.minpiecelen = minpiecelen;
          }
 
          possibleconnections(mytiles) {
             var pcs = [];
-            var neighbors = [[1, 0], [1, -1], [0, -1], [-1, 0], [0, 1], [1, 1]];
+
             mytiles.forEach((v) => {
                if (v.hasconnections) {
                   v.hasconnections = false;
-                  neighbors.forEach((n) => {
-                     let cpt = new Tile(v.x + n[0], v.y + n[1]);
-                     if (this.grid.istilevalid(cpt) && !mytiles.find(nv => nv.eq(cpt)) && !this.grid.istilevisited(cpt)) {
+                  for (var i = 0; i < 6; i++) {
+                     var cc = DiagonalConnection.FromPointAndSextant(v, i);
+                     if (this.grid.istilevalid(cc.p2) && !mytiles.find(nv => nv.eq(cc.p2)) && !this.grid.istilevisited(cc.p2)) {
                         var validconnection = true;
-                        neighbors.forEach((n2) => {
-                           if (mytiles.find(nv => nv.eq(new Tile(cpt.x + n2[0], cpt.y + n2[1])))) {
+                        for (var j = 0; j < 6; j++) {
+                           var ncc = DiagonalConnection.FromPointAndSextant(cc.p2, j);
+                           if (!ncc.p2.eq(v) && mytiles.find(nv => nv.eq(ncc.p2))) {
                               validconnection = false;
                            }
-                        });
+                        }
                         if (validconnection) {
-                           pcs.push(new DiagonalConnection(v, cpt));
+                           pcs.push(cc);
                            v.hasconnections = true;
                         }
                      }
-                  });
+                  }
                }
             });
             return pcs;
@@ -282,7 +254,7 @@
             }
          }
 
-         fillholes(allowpartials) {
+         fillholes() {
             var filled = false;
             this.pieces = this.pieces.sort((a, b) => a.length - b.length);
             this.pieces.forEach((p) => {
@@ -291,7 +263,7 @@
                   tiles.push(con.p2);
                });
                tiles.forEach((v) => {
-                  var possibleconnections = this.possibleconnections([v], allowpartials);
+                  var possibleconnections = this.possibleconnections([v]);
                   if (possibleconnections.length) {
                      possibleconnections = possibleconnections.filter(function (ele) {
                         return !Boolean(tiles.find(vf => vf.eq(ele.p2)));
@@ -300,7 +272,6 @@
                         p.push(pc);
                         tiles.push(pc.p2);
                         filled = true;
-                        this.grid.occupycell(pc.cell);
                         this.grid.visittile(pc.p2);
                      });
                   }
@@ -309,27 +280,26 @@
             });
             return filled;
          }
-         5
 
          static addarcs(con, connections, arcs, rad, border, first) {
-         
-            console.log("Enter addarcs");
+
+            //console.log("Enter addarcs");
             if (Math.abs(con.p1.x) % 2) {
-               console.log("P1 x odd "+con.p1.x);
+               //console.log("P1 x odd " + con.p1.x);
                var inarcincs = [[1, 0], [-1, 0], [-2, 0], [-1, 1], [1, 1], [2, 0]];
             } else {
-               console.log("P1 x even "+con.p1.x);
+               //console.log("P1 x even " + con.p1.x);
                var inarcincs = [[1, -1], [-1, -1], [-2, 0], [-1, 0], [1, 0], [2, 0]];
             }
             if (Math.abs(con.p2.x) % 2) {
-               console.log("P2 x odd "+con.p2.x);
-               var outarcincs = [[1, 1], [2, 0], [1,-1], [-1, 0], [-2, 0], [-1, 0]];
-            }else{
-               console.log("P2 x even "+con.p2.x);
+               //console.log("P2 x odd " + con.p2.x);
+               var outarcincs = [[1, 1], [2, 0], [1, -1], [-1, 0], [-2, 0], [-1, 0]];
+            } else {
+               //console.log("P2 x even " + con.p2.x);
                var outarcincs = [[1, 0], [2, 0], [1, 0], [-1, -1], [-2, 0], [-1, 1]];
             }
 
-            console.log("entry sextant "+   (con.sextant + 4) % 6 +"con sextant " + con.sextant);
+            //console.log("entry sextant " + (con.sextant + 4) % 6 + "con sextant " + con.sextant);
             arcs.push(new HexArc(con.p1.x + inarcincs[con.sextant][0], con.p1.y + inarcincs[con.sextant][1], rad, border, (con.sextant + 4) % 6, 0));
 
             for (var i = 0; i < 4; i++) {
@@ -337,18 +307,18 @@
                if (s < 0) {
                   s = 6 + s;
                }
-               s = s%6;
+               s = s % 6;
 
                var pct = DiagonalConnection.FromPointAndSextant(con.p2, s);
                if (connections.find(c => c.eq(pct))) {
-                  console.log("addarcs 1");
+                  //console.log("addarcs 1");
                   CircleFractalJigsaw.addarcs(pct, connections, arcs, rad, border, false);
                   i++;
                } else {
                   arcs.push(new HexArc(con.p2.x, con.p2.y, rad, border, s, 1));
                }
             }
-            console.log("exit sextant "+   (con.sextant + 1) % 6 +"con sextant " + con.sextant);
+            //console.log("exit sextant " + (con.sextant + 1) % 6 + "con sextant " + con.sextant);
             arcs.push(new HexArc(con.p1.x + outarcincs[con.sextant][0], con.p1.y + outarcincs[con.sextant][1], rad, border, (con.sextant + 1) % 6, 0));
 
             if (first) {
@@ -357,7 +327,7 @@
                   if (q < 0) {
                      q = 6 + q;
                   }
-                  q = q%6;
+                  q = q % 6;
                   var pct = DiagonalConnection.FromPointAndSextant(con.p1, q);
 
                   if (connections.find(c => c.eq(pct))) {
@@ -368,12 +338,12 @@
                   }
                }
             }
-            console.log("Exit addarcs");
+            //console.log("Exit addarcs");
          }
 
          exportsvg(border, crad) {
-            var width = this.ncols * 2 * crad + 2 * border;
-            var height = this.nrows * 2 * crad + 2 * border;
+            var width = getwidth(crad, border);
+            var height = getheight(crad, border);
 
             var data = "<?xml version=\"1.0\" encoding=\"utf-8\" ?><svg baseProfile=\"full\" height=\"" + height + "mm\" version=\"1.1\" viewBox=\"0 0 " + width + " " + height + "\" width=\"" + width + "mm\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:ev=\"http://www.w3.org/2001/xml-events\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><defs />"
 
@@ -391,8 +361,8 @@
             return data;
          }
          exportsvg_nooverlap_singlepath(border, crad) {
-            var width = this.ncols * 2 * crad + 2 * border;
-            var height = this.nrows * 2 * crad + 2 * border;
+            var width = getwidth(crad, border);
+            var height = getheight(crad, border);
             var data = "<?xml version=\"1.0\" encoding=\"utf-8\" ?><svg baseProfile=\"full\" height=\"" + height + "mm\" version=\"1.1\" viewBox=\"0 0 " + width + " " + height + "\" width=\"" + width + "mm\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:ev=\"http://www.w3.org/2001/xml-events\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><defs />"
             var allarcs = [];
             data += "<path fill=\"none\" stroke=\"black\" stroke-width=\"0.1\" d=\"";
@@ -412,14 +382,14 @@
                });
             });
             data += "\"></path>"
-            data += "<path fill=\"none\" stroke=\"black\" stroke-width=\"0.1\" d=\"" + createframe() + "\"></path>";
+            data += "<path fill=\"none\" stroke=\"black\" stroke-width=\"0.1\" d=\"" + createframe(border, crad) + "\"></path>";
             data += "</svg>";
             return data;
          }
 
          exportsvg_nooverlap(border, crad) {
-            var width = this.ncols * 2 * crad + 2 * border;
-            var height = this.nrows * 2 * crad + 2 * border;
+            var width = getwidth(crad, border);
+            var height = getheight(crad, border);
             var data = "<?xml version=\"1.0\" encoding=\"utf-8\" ?><svg baseProfile=\"full\" height=\"" + height + "mm\" version=\"1.1\" viewBox=\"0 0 " + width + " " + height + "\" width=\"" + width + "mm\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:ev=\"http://www.w3.org/2001/xml-events\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><defs />"
             var allarcs = [];
             var path = "";
@@ -448,7 +418,7 @@
                   data += path;
                }
             });
-            data += "<path fill=\"none\" stroke=\"black\" stroke-width=\"0.1\" d=\"" + createframe() + "\"></path>";
+            data += "<path fill=\"none\" stroke=\"black\" stroke-width=\"0.1\" d=\"" + createframe(border, crad) + "\"></path>";
             data += "</svg>";
             return data;
          }
@@ -486,8 +456,8 @@
 
          drawgrid(border, crad) {
             var centers = [];
-            for (var i = 0; i < this.grid.ncol; i++) {
-               for (var j = 0; j < this.grid.nrow; j++) {
+            for (var i = 0; i < this.grid.nrow; i++) {
+               for (var j = 0; j < this.grid.ncol; j++) {
                   var a = new HexArc(i, j, rad, border, 0, 1);
                   centers.push(a.cp);
                }
@@ -516,6 +486,7 @@
                np++;
             });
          }
+
       }
 
 
@@ -540,7 +511,7 @@
       function parse_input() {
          seed = parseInt($("seed").value);
          ncols = parseInt($("ncols").value);
-         nrows = parseInt($("nrows").value);
+         nrows = parseInt($("nrows").value)*2;
          frame = parseFloat($("frame").value);
          framecorner = parseFloat($("framecorner").value);
          rad = parseFloat($("cradius").value);
@@ -551,8 +522,8 @@
 
       function update() {
          parse_input();
-         $("width").innerHTML = ncols * 2 * rad + 2 * frame;
-         $("height").innerHTML = nrows * 2 * rad + 2 * frame;
+         $("width").innerHTML = getwidth(rad, frame);
+         $("height").innerHTML = getheight(rad, frame);
       }
       function savesvg(mode) {
          switch (mode) {
@@ -569,9 +540,18 @@
 
       }
 
-      function createframe() {
-         var width = ncols * 2 * rad + 2 * frame;
-         var height = nrows * 2 * rad + 2 * frame;
+      function getwidth(crad, border) {
+         return (this.ncols + 1) * crad + 2 * border;
+      }
+
+      function getheight(crad, border) {
+         const sin60 = 0.86602540378443864676372317075294;
+         return 2 * crad + (this.nrows - 1) * 2 * crad * sin60 + 2 * border;
+      }
+
+      function createframe(border, crad) {
+         var width = getwidth(crad, border);
+         var height = getheight(crad, border);
 
          var data = "M" + framecorner + "," + 0 + " ";
          data += "H " + (width - framecorner);
@@ -600,27 +580,25 @@
 
       function generate() {
          parse_input();
-         jig = new CircleFractalJigsaw(ncols, nrows, minp, maxp);
+         jig = new CircleFractalJigsaw(ncols, nrows/2, minp, maxp);
 
-         //jig.generate();
-         // while (jig.fillholes(false));
-         // jig.fillholes(true);
-
-         $("puzzlecontainer").setAttribute("width", ncols * 2 * rad + 2 * frame);
-         $("puzzlecontainer").setAttribute("height", nrows * 2 * rad + 2 * frame);
+         jig.generate();
+         //while(jig.fillholes());
+         $("puzzlecontainer").setAttribute("width", getwidth(rad, frame));
+         $("puzzlecontainer").setAttribute("height", getheight(rad, frame));
 
          while ($("puzzlecontainer").firstChild) {
             $("puzzlecontainer").removeChild($("puzzlecontainer").firstChild);
          }
-         jig.drawgrid(frame, rad).forEach((c) => {
-            var circle = document.createElementNS($("puzzlecontainer").namespaceURI, "circle")
-            circle.setAttribute("cx", c.x);
-            circle.setAttribute("cy", c.y);
-            circle.setAttribute("r", rad);
-            circle.setAttribute("stroke", "gray");
-            circle.setAttribute("fill", "none");
-            $("puzzlecontainer").appendChild(circle);
-         });
+         // jig.drawgrid(frame, rad).forEach((c) => {
+         //    var circle = document.createElementNS($("puzzlecontainer").namespaceURI, "circle")
+         //    circle.setAttribute("cx", c.x);
+         //    circle.setAttribute("cy", c.y);
+         //    circle.setAttribute("r", rad);
+         //    circle.setAttribute("stroke", "gray");
+         //    circle.setAttribute("fill", "none");
+         //    $("puzzlecontainer").appendChild(circle);
+         // });
          jig.multipaths(frame, rad).forEach((p) => {
             var newpath = document.createElementNS($("puzzlecontainer").namespaceURI, "path")
             newpath.setAttribute("d", p);
@@ -630,7 +608,7 @@
             $("puzzlecontainer").appendChild(newpath);
          });
          var framedraw = document.createElementNS($("puzzlecontainer").namespaceURI, "path")
-         framedraw.setAttribute("d", createframe());
+         framedraw.setAttribute("d", createframe(frame, rad));
          framedraw.setAttribute("stroke", "black");
          framedraw.setAttribute("fill", "none");
          framedraw.setAttribute("stroke-width", 0.5);
