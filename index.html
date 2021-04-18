@@ -165,7 +165,7 @@
 
 
             this._cpx = gcx * rad + rad + offs;
-            this._cpy = gcy * 4 * rsin + rad + offs + (2 * rsin * (gcx % 2));
+            this._cpy = gcy * 4 * rsin + rad + offs + (2 * rsin * (Math.abs(gcx) % 2));
             this._sextant = sextant;
             this._rad = rad;
             this._sign = sign
@@ -179,7 +179,7 @@
                this._sp = pb;
                this._ep = pa;
             }
-            console.log("Center " + this._cpx + " " + this._cpy + " sext " + this.sextant + " sp " + this._sp.str() + " ep " + this._ep.str());
+            console.log(gcx+ " "+gcy+" Center " + this._cpx + " " + this._cpy + " sext " + this.sextant + " sp " + this._sp.str() + " ep " + this._ep.str());
          }
          eq(a) {
             return (this.quad == a.quad && this.cp.eq(a.cp));
@@ -207,17 +207,23 @@
             this.nrows = nrows;
             this.grid = new TileGrid(ncols, nrows)
             this.pieces = [
-            [new DiagonalConnection(new Tile(0, 0), new Tile(1, 0)),
-            new DiagonalConnection(new Tile(1, 0), new Tile(3,0)),
+            [
+            new DiagonalConnection(new Tile(0, 0), new Tile(1, 0)),
+            //new DiagonalConnection(new Tile(6,0), new Tile(7, 0)),
+            // 
+            // new DiagonalConnection(new Tile(1, 0), new Tile(3,0)),
             // new DiagonalConnection(new Tile(3, 0), new Tile(4,0)),
             // new DiagonalConnection(new Tile(4,0), new Tile(6, 0)),
             // new DiagonalConnection(new Tile(6,0), new Tile(7, 0)),
             // new DiagonalConnection(new Tile(7,0), new Tile(9, 0)),
             // new DiagonalConnection(new Tile(7,0), new Tile(6,1)),
+            // new DiagonalConnection(new Tile(6,0), new Tile(7, 0)),
             // new DiagonalConnection(new Tile(0, 0), new Tile(1, 0)),
             // new DiagonalConnection(new Tile(0, 0), new Tile(1, 0)),
             // new DiagonalConnection(new Tile(0, 0), new Tile(1, 0)),
-                      ]
+                      ],
+                     //  [new DiagonalConnection(new Tile(2, 0), new Tile(3, 0))],
+                     //  [new DiagonalConnection(new Tile(4, 0), new Tile(5, 0))],
             ];
             this.maxpiecelen = maxpiecelen;
             this.minpiecelen = minpiecelen;
@@ -307,21 +313,25 @@
          
             console.log("Enter addarcs");
             if (con.p1.x % 2) {
+               console.log("P1 x odd "+con.p1.x);
                var inarcincs = [[1, 0], [-1, 0], [-2, 0], [-1, 1], [1, 1], [2, 0]];
             } else {
+               console.log("P1 x even "+con.p1.x);
                var inarcincs = [[1, -1], [-1, -1], [-2, 0], [-1, 0], [1, 0], [2, 0]];
             }
             if (con.p2.x % 2) {
-               var outarcincs = [[1, 1], [2, 0], [1, 0], [-1, 0], [-2, 0], [-1, 1]];
+               console.log("P2 x odd "+con.p2.x);
+               var outarcincs = [[1, 1], [2, 0], [1, 0], [-1, 0], [-2, 0], [-1, 0]];
             }else{
+               console.log("P2 x even "+con.p2.x);
                var outarcincs = [[1, 0], [2, 0], [1, -1], [-1, -1], [-2, 0], [-1, 0]];
             }
 
             console.log("entry sextant "+   (con.sextant + 4) % 6 +"con sextant " + con.sextant);
             arcs.push(new HexArc(con.p1.x + inarcincs[con.sextant][0], con.p1.y + inarcincs[con.sextant][1], rad, border, (con.sextant + 4) % 6, 0));
 
-            for (var i = 0; i < 5; i++) {
-               var s = (con.sextant + 2 - i);
+            for (var i = 0; i < 4; i++) {
+               var s = (con.sextant + 1 - i);
                if (s < 0) {
                   s = 6 + s;
                }
@@ -340,8 +350,8 @@
             arcs.push(new HexArc(con.p1.x + outarcincs[con.sextant][0], con.p1.y + outarcincs[con.sextant][1], rad, border, (con.sextant + 1) % 6, 0));
 
             if (first) {
-               for (var i = 0; i < 5; i++) {
-                  var q = (con.sextant + 5 - i);
+               for (var i = 0; i < 4; i++) {
+                  var q = (con.sextant + 4 - i);
                   if (q < 0) {
                      q = 6 + q;
                   }
