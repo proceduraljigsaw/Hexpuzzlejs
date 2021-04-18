@@ -57,7 +57,14 @@
             this._p2 = p2;
             this._sextant = 0;
             var index = ((p2.x - p1.x + 2) * 2) + (p2.y - p1.y);
-            var sextants = [3, -1, 2, 4, -1, -1, 1, 5, 0];
+            if (p1.x % 2) {
+               var sextants = [3, -1, 2, 4, -1, -1, 1, 5, 0];
+            } else {
+               var sextants = [3, 2, 4, -1, -1, 1, 5, -1, 0];
+            }
+
+
+
 
             this._sextant = sextants[index];
 
@@ -82,7 +89,11 @@
 
          static FromPointAndSextant(p1, sextant) {
             var p2;
-            var increments = [[2, 0], [1, 0], [-1, 0], [-2, 0], [-1, 1], [1, 1]];
+            if (p1.x % 2) {
+               var increments = [[2, 0], [1, 0], [-1, 0], [-2, 0], [-1, 1], [1, 1]];
+            } else {
+               var increments = [[2, 0], [1, -1], [-1, -1], [-2, 0], [-1, 0], [1, 0]];
+            }
             p2 = new Tile(p1.x + increments[sextant][0], p1.y + increments[sextant][1]);
             var con = new DiagonalConnection(p1, p2);
             if (con.sextant != sextant) {
@@ -195,7 +206,9 @@
             this.ncols = ncols;
             this.nrows = nrows;
             this.grid = new TileGrid(ncols, nrows)
-            this.pieces = [[new DiagonalConnection(new Tile(0, 0), new Tile(2, 0))]];
+            this.pieces = [
+            [new DiagonalConnection(new Tile(0, 0), new Tile(1, 0))]
+            ];
             this.maxpiecelen = maxpiecelen;
             this.minpiecelen = minpiecelen;
          }
@@ -284,36 +297,33 @@
 
             if (con.p1.x % 2) {
                var inarcincs = [[1, 0], [-1, 0], [-2, 0], [-1, 1], [1, 1], [2, 0]];
-               var outarcincs = [[1, 1], [2, 0], [1, 0], [-1, 0], [-2, 0], [-1, 1]];
             } else {
                var inarcincs = [[1, -1], [-1, -1], [-2, 0], [-1, 0], [1, 0], [2, 0]];
+            }
+            if (con.p2.x % 2) {
+               var outarcincs = [[1, 1], [2, 0], [1, 0], [-1, 0], [-2, 0], [-1, 1]];
+            }else{
                var outarcincs = [[1, 0], [2, 0], [1, -1], [-1, -1], [-2, 0], [-1, 0]];
             }
 
-            // arcs.push(new HexArc(con.p1.x, con.p1.y , rad, border, 0, 1));
-            // arcs.push(new HexArc(con.p1.x, con.p1.y , rad, border, 5, 1));
-            // arcs.push(new HexArc(con.p1.x, con.p1.y , rad, border, 4, 1));
-            // arcs.push(new HexArc(con.p1.x, con.p1.y , rad, border, 3, 1));
-            // arcs.push(new HexArc(con.p1.x, con.p1.y , rad, border, 2, 1));
-            // arcs.push(new HexArc(con.p1.x, con.p1.y , rad, border, 1, 1));
-
-
+            console.log("entry sextant "+   (con.sextant + 4) % 6 +"con sextant " + con.sextant);
             arcs.push(new HexArc(con.p1.x + inarcincs[con.sextant][0], con.p1.y + inarcincs[con.sextant][1], rad, border, (con.sextant + 4) % 6, 0));
 
             for (var i = 0; i < 4; i++) {
-               var q = (con.sextant + 1 - i);
-               if (q < 0) {
-                  q = 6 + q;
+               var s = (con.sextant + 1 - i);
+               if (s < 0) {
+                  s = 6 + s;
                }
-               console.log(q);
-               var pct = DiagonalConnection.FromPointAndSextant(con.p2, q);
+               s = s%6;
+               console.log("kk"+ con.sextant+ " "+s);
+               var pct = DiagonalConnection.FromPointAndSextant(con.p2, s);
                if (connections.find(c => c.eq(pct))) {
                   CircleFractalJigsaw.addarcs(pct, connections, arcs, rad, border, false);
                } else {
-                  arcs.push(new HexArc(con.p2.x, con.p2.y, rad, border, q, 1));
+                  arcs.push(new HexArc(con.p2.x, con.p2.y, rad, border, s, 1));
                }
             }
-
+            console.log("exit sextant "+   (con.sextant + 1) % 6 +"con sextant " + con.sextant);
             arcs.push(new HexArc(con.p1.x + outarcincs[con.sextant][0], con.p1.y + outarcincs[con.sextant][1], rad, border, (con.sextant + 1) % 6, 0));
 
             if (first) {
@@ -322,6 +332,7 @@
                   if (q < 0) {
                      q = 6 + q;
                   }
+                  q = q%6;
                   var pct = DiagonalConnection.FromPointAndSextant(con.p2, q);
 
                   if (connections.find(c => c.eq(pct))) {
