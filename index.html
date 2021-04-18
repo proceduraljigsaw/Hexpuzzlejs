@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+   <!-- HTML and several functions based or copied from https://github.com/Draradech/jigsaw -->
+   <meta charset="UTF-8">
+   <title>Fractal jigsaw puzzle generator</title>
+   <script type="text/javascript">
+
+      var seed = 1;
+      var ncols, nrows, rad, frame, framecorner, minp, maxp;
+      var jig;
+      function random() { var x = Math.sin(seed) * 10000; seed += 1; return x - Math.floor(x); }
+      function uniform(min, max) { var r = random(); return min + r * (max - min); }
+      function rbool() { return random() > 0.5; }
+
+      function $(id) { return document.getElementById(id); }
+
+      function updateseed() { $("_seed").value = $("seed").value; update(); }
+      function updatencols() { $("_ncols").value = $("ncols").value; update(); }
+      function updatenrows() { $("_nrows").value = $("nrows").value; update(); }
+      function update_seed() { var val = parseInt($("_seed").value); if (!isNaN(val)) { $("seed").value = val; } updateseed(); }
+      function update_ncols() { var val = parseInt($("_ncols").value); if (!isNaN(val)) { $("ncols").value = val; } updatencols(); }
+      function update_nrows() { var val = parseInt($("_nrows").value); if (!isNaN(val)) { $("nrows").value = val; } updatenrows(); }
+
+      class Tile {
+         constructor(x, y) {
+            this._x = x;
+            this._y = y;
+            this.haspossibleconnections = true;
+         }
+         get hasconnections() {
+            return this.haspossibleconnections;
+         }
+         set hasconnections(val) {
+            this.haspossibleconnections = val;
+         }
+         get x() {
+            return this._x;
+         }
+         get y() {
+            return this._y;
+         }
+         str() {
+            return "(" + this._x + "," + this._y + ")";
+         }
+         eq(p) {
+            return (this.x == p.x && this.y == p.y);
+         }
+      }
+
+
+
+      class DiagonalConnection {
+         constructor(p1, p2) {
+            this._p1 = p1;
+            this._p2 = p2;
+            this._sextant = 0;
+            var index = ((p2.x - p1.x + 2) * 2) + (p2.y - p1.y);
+            var sextants = [3, -1, 2, 4, -1, -1, 1, 5, 0];
+
+            this._sextant = sextants[index];
+
+
+         }
+         eq(other) {
+            return (this === other) || (this.p1.eq(other.p1) && this.p2.eq(other.p2));
+         }
+         get slope() {
+            return this._slope;
+         }
+         get sextant() {
+            return this._sextant;
+         }
+         get p1() {
+            return this._p1;
+         }
+         get p2() {
+            return this._p2;
+         }
+
+
+         static FromPointAndSextant(p1, sextant) {
+            var p2;
+            var increments = [[2, 0], [1, 0], [-1, 0], [-2, 0], [-1, 1], [1, 1]];
+            p2 = new Tile(p1.x + increments[sextant][0], p1.y + increments[sextant][1]);
+            var con = new DiagonalConnection(p1, p2);
+            if (con.sextant != sextant) {
+               console.log("EPIC FAIL");
+            }
+            return con;
+         }
+      }
+
+
+      class TileGrid {
+         constructor(nrow, ncol) {
+            this.nrow = nrow;
+            this.ncol = ncol;
+            this.visited = new Array(this.ncol * this.nrow).fill(false);
+            this._nunvisited = this.ncol * this.nrow;
+         }
+
+         randomemptytile() {
+            var emptytiles = this.visited.reduce(function (acc, curr, index) {
+               if (!curr) {
+                  acc.push(index);
+               }
+               return acc;
+            }, []);
+
+            var index = emptytiles[Math.floor(uniform(0, emptytiles.length))];
+            var y = Math.floor(index / this.nrow);
+            var x = index % this.nrow;
+            return new Tile(x, y);
+         }
+
+         reset() {
+            this.visited.fill(false);
+            this._nunvisited = this.ncol * this.nrow;
+         }
+         istilevalid(v) {
+            return (v.x >= 0 && v.x < this.nrow && v.y >= 0 && v.y < this.ncol);
+         }
+
+         istilevisited(v) {
+            return this.visited[v.y * this.nrow + v.x];
+         }
+
+         visittile(v) {
+            if (!this.visited[v.y * this.nrow + v.x]) {
+               this.visited[v.y * this.nrow + v.x] = true;
+               this._nunvisited--;
+            }
+         }
+
+         get nunvisited() {
+            return this._nunvisited;
+         }
+
+         get notvisited() {
+            return this._notvisited;
+         }
+
+      }
+
+      class HexArc {
+         constructor(gcx, gcy, rad, offs, sextant, sign) {
+            const sin60 = 0.86602540378443864676372317075294;
+            const cos60 = 0.5;
+            var rcos = rad * cos60;
+            var rsin = rad * sin60;
+            var increments = [[rad, 0], [rcos, -rsin], [-rcos, -rsin], [-rad, 0], [-rcos, rsin], [rcos, rsin], [rad, 0]];
+
+
+            this._cpx = gcx * rad + rad + offs;
+            this._cpy = gcy * 4 * rsin + rad + offs + (2 * rsin * (gcx % 2));
+            this._sextant = sextant;
+            this._rad = rad;
+            this._sign = sign
+            var pa = new Tile(this._cpx + increments[sextant][0], this._cpy + increments[sextant][1]);
+            var pb = new Tile(this._cpx + increments[sextant + 1][0], this._cpy + increments[sextant + 1][1]);
+
+            if (this.sign == 0) {
+               this._sp = pa;
+               this._ep = pb;
+            } else {
+               this._sp = pb;
+               this._ep = pa;
+            }
+            console.log("Center " + this._cpx + " " + this._cpy + " sext " + this.sextant + " sp " + this._sp.str() + " ep " + this._ep.str());
+         }
+         eq(a) {
+            return (this.quad == a.quad && this.cp.eq(a.cp));
+         }
+         get cp() {
+            return new Tile(this._cpx, this._cpy);
+         }
+         get sign() {
+            return this._sign;
+         }
+         get sp() {
+            return this._sp;
+         }
+         get ep() {
+            return this._ep;
+         }
+         get sextant() {
+            return this._sextant;
+         }
+      }
+
+      class CircleFractalJigsaw {
+         constructor(ncols, nrows, minpiecelen, maxpiecelen) {
+            this.ncols = ncols;
+            this.nrows = nrows;
+            this.grid = new TileGrid(ncols, nrows)
+            this.pieces = [[new DiagonalConnection(new Tile(0, 0), new Tile(2, 0))]];
+            this.maxpiecelen = maxpiecelen;
+            this.minpiecelen = minpiecelen;
+         }
+
+         possibleconnections(mytiles) {
+            var pcs = [];
+            var neighbors = [[1, 0], [1, -1], [0, -1], [-1, 0], [0, 1], [1, 1]];
+            mytiles.forEach((v) => {
+               if (v.hasconnections) {
+                  v.hasconnections = false;
+                  neighbors.forEach((n) => {
+                     let cpt = new Tile(v.x + n[0], v.y + n[1]);
+                     if (this.grid.istilevalid(cpt) && !mytiles.find(nv => nv.eq(cpt)) && !this.grid.istilevisited(cpt)) {
+                        var validconnection = true;
+                        neighbors.forEach((n2) => {
+                           if (mytiles.find(nv => nv.eq(new Tile(cpt.x + n2[0], cpt.y + n2[1])))) {
+                              validconnection = false;
+                           }
+                        });
+                        if (validconnection) {
+                           pcs.push(new DiagonalConnection(v, cpt));
+                           v.hasconnections = true;
+                        }
+                     }
+                  });
+               }
+            });
+            return pcs;
+         }
+
+         createpiece() {
+            var mytiles = new Array();
+            var myconnections = new Array();
+            var targetpiecelen = Math.round(uniform(this.minpiecelen, this.maxpiecelen));
+            var vi = this.grid.randomemptytile();
+            mytiles.push(vi);
+            this.grid.visittile(vi);
+
+
+            while (this.grid.nunvisited > 0 && mytiles.length < targetpiecelen) {
+               var possibleconnections = this.possibleconnections(mytiles, false);
+               if (possibleconnections.length == 0) {
+                  break;
+               }
+               var chosenconnection = possibleconnections[Math.floor(uniform(0, possibleconnections.length))];
+               myconnections.push(chosenconnection);
+               mytiles.push(chosenconnection.p2);
+               this.grid.visittile(chosenconnection.p2);
+            }
+
+            if (mytiles.length >= this.minpiecelen) {
+               this.pieces.push(myconnections);
+            }
+         }
+
+         fillholes(allowpartials) {
+            var filled = false;
+            this.pieces = this.pieces.sort((a, b) => a.length - b.length);
+            this.pieces.forEach((p) => {
+               var tiles = [p[0].p1];
+               p.forEach((con) => {
+                  tiles.push(con.p2);
+               });
+               tiles.forEach((v) => {
+                  var possibleconnections = this.possibleconnections([v], allowpartials);
+                  if (possibleconnections.length) {
+                     possibleconnections = possibleconnections.filter(function (ele) {
+                        return !Boolean(tiles.find(vf => vf.eq(ele.p2)));
+                     });
+                     possibleconnections.forEach((pc) => {
+                        p.push(pc);
+                        tiles.push(pc.p2);
+                        filled = true;
+                        this.grid.occupycell(pc.cell);
+                        this.grid.visittile(pc.p2);
+                     });
+                  }
+               });
+
+            });
+            return filled;
+         }
+         5
+
+         static addarcs(con, connections, arcs, rad, border, first) {
+
+            if (con.p1.x % 2) {
+               var inarcincs = [[1, 0], [-1, 0], [-2, 0], [-1, 1], [1, 1], [2, 0]];
+               var outarcincs = [[1, 1], [2, 0], [1, 0], [-1, 0], [-2, 0], [-1, 1]];
+            } else {
+               var inarcincs = [[1, -1], [-1, -1], [-2, 0], [-1, 0], [1, 0], [2, 0]];
+               var outarcincs = [[1, 0], [2, 0], [1, -1], [-1, -1], [-2, 0], [-1, 0]];
+            }
+
+            // arcs.push(new HexArc(con.p1.x, con.p1.y , rad, border, 0, 1));
+            // arcs.push(new HexArc(con.p1.x, con.p1.y , rad, border, 5, 1));
+            // arcs.push(new HexArc(con.p1.x, con.p1.y , rad, border, 4, 1));
+            // arcs.push(new HexArc(con.p1.x, con.p1.y , rad, border, 3, 1));
+            // arcs.push(new HexArc(con.p1.x, con.p1.y , rad, border, 2, 1));
+            // arcs.push(new HexArc(con.p1.x, con.p1.y , rad, border, 1, 1));
+
+
+            arcs.push(new HexArc(con.p1.x + inarcincs[con.sextant][0], con.p1.y + inarcincs[con.sextant][1], rad, border, (con.sextant + 4) % 6, 0));
+
+            for (var i = 0; i < 4; i++) {
+               var q = (con.sextant + 1 - i);
+               if (q < 0) {
+                  q = 6 + q;
+               }
+               console.log(q);
+               var pct = DiagonalConnection.FromPointAndSextant(con.p2, q);
+               if (connections.find(c => c.eq(pct))) {
+                  CircleFractalJigsaw.addarcs(pct, connections, arcs, rad, border, false);
+               } else {
+                  arcs.push(new HexArc(con.p2.x, con.p2.y, rad, border, q, 1));
+               }
+            }
+
+            arcs.push(new HexArc(con.p1.x + outarcincs[con.sextant][0], con.p1.y + outarcincs[con.sextant][1], rad, border, (con.sextant + 1) % 6, 0));
+
+            if (first) {
+               for (var i = 0; i < 4; i++) {
+                  var q = (con.sextant + 4 - i);
+                  if (q < 0) {
+                     q = 6 + q;
+                  }
+                  var pct = DiagonalConnection.FromPointAndSextant(con.p2, q);
+
+                  if (connections.find(c => c.eq(pct))) {
+                     CircleFractalJigsaw.addarcs(pct, connections, arcs, rad, border, false);
+                  } else {
+                     arcs.push(new HexArc(con.p1.x, con.p1.y, rad, border, q, 1));
+                  }
+               }
+            }
+
+         }
+
+         exportsvg(border, crad) {
+            var width = this.ncols * 2 * crad + 2 * border;
+            var height = this.nrows * 2 * crad + 2 * border;
+
+            var data = "<?xml version=\"1.0\" encoding=\"utf-8\" ?><svg baseProfile=\"full\" height=\"" + height + "mm\" version=\"1.1\" viewBox=\"0 0 " + width + " " + height + "\" width=\"" + width + "mm\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:ev=\"http://www.w3.org/2001/xml-events\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><defs />"
+
+            this.pieces.forEach((p) => {
+               var arcs = [];
+               CircleFractalJigsaw.addarcs(p[0], p, arcs, crad, border, true);
+               data += "<path fill=\"none\" stroke=\"black\" stroke-width=\"0.1\" d=\"M" + arcs[0].sp.x + "," + arcs[0].sp.y + " ";
+               arcs.forEach((a) => {
+                  data += "A " + crad + " " + crad + " 0 0," + a.sign + " " + a.ep.x + " " + a.ep.y + " ";
+               });
+               data += "Z\"></path>";
+            });
+            data += "<path fill=\"none\" stroke=\"black\" stroke-width=\"0.1\" d=\"" + createframe() + "\"></path>";
+            data += "</svg>";
+            return data;
+         }
+         exportsvg_nooverlap_singlepath(border, crad) {
+            var width = this.ncols * 2 * crad + 2 * border;
+            var height = this.nrows * 2 * crad + 2 * border;
+            var data = "<?xml version=\"1.0\" encoding=\"utf-8\" ?><svg baseProfile=\"full\" height=\"" + height + "mm\" version=\"1.1\" viewBox=\"0 0 " + width + " " + height + "\" width=\"" + width + "mm\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:ev=\"http://www.w3.org/2001/xml-events\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><defs />"
+            var allarcs = [];
+            data += "<path fill=\"none\" stroke=\"black\" stroke-width=\"0.1\" d=\"";
+            var currentlocation = new Tile(-1, -1);
+            this.pieces.forEach((p) => {
+               var arcs = [];
+               CircleFractalJigsaw.addarcs(p[0], p, arcs, crad, border, true);
+               arcs.forEach((a) => {
+                  if (!allarcs.find(na => na.eq(a))) {
+                     allarcs.push(a);
+                     if (!a.sp.eq(currentlocation)) {
+                        data += "M" + a.sp.x + "," + a.sp.y + " "
+                     }
+                     data += "A " + crad + " " + crad + " 0 0," + a.sign + " " + a.ep.x + " " + a.ep.y + " ";
+                     currentlocation = a.ep;
+                  }
+               });
+            });
+            data += "\"></path>"
+            data += "<path fill=\"none\" stroke=\"black\" stroke-width=\"0.1\" d=\"" + createframe() + "\"></path>";
+            data += "</svg>";
+            return data;
+         }
+
+         exportsvg_nooverlap(border, crad) {
+            var width = this.ncols * 2 * crad + 2 * border;
+            var height = this.nrows * 2 * crad + 2 * border;
+            var data = "<?xml version=\"1.0\" encoding=\"utf-8\" ?><svg baseProfile=\"full\" height=\"" + height + "mm\" version=\"1.1\" viewBox=\"0 0 " + width + " " + height + "\" width=\"" + width + "mm\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:ev=\"http://www.w3.org/2001/xml-events\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"><defs />"
+            var allarcs = [];
+            var path = "";
+            this.pieces.forEach((p) => {
+               var inpath = false;
+               var arcs = [];
+               CircleFractalJigsaw.addarcs(p[0], p, arcs, crad, border, true);
+               arcs.forEach((a) => {
+                  if (allarcs.find(na => na.eq(a))) {
+                     if (inpath) {
+                        path += "\"></path>"
+                        data += path;
+                        inpath = false;
+                     }
+                  } else {
+                     allarcs.push(a);
+                     if (!inpath) {
+                        path = "<path fill=\"none\" stroke=\"black\" stroke-width=\"0.1\" d=\"M" + a.sp.x + "," + a.sp.y + " ";
+                        inpath = true;
+                     }
+                     path += "A " + crad + " " + crad + " 0 0," + a.sign + " " + a.ep.x + " " + a.ep.y + " ";
+                  }
+               });
+               if (inpath) {
+                  path += "\"></path>"
+                  data += path;
+               }
+            });
+            data += "<path fill=\"none\" stroke=\"black\" stroke-width=\"0.1\" d=\"" + createframe() + "\"></path>";
+            data += "</svg>";
+            return data;
+         }
+
+         singlepath(border, crad) {
+
+            var data = "";
+            this.pieces.forEach((p) => {
+               var arcs = [];
+               CircleFractalJigsaw.addarcs(p[0], p, arcs, crad, border, true);
+               data += "M" + arcs[0].sp.x + "," + arcs[0].sp.y + " ";
+               arcs.forEach((a) => {
+                  data += "A " + crad + " " + crad + " 0 0," + a.sign + " " + a.ep.x + " " + a.ep.y + " ";
+               });
+            });
+            return data;
+         }
+
+         multipaths(border, crad) {
+            var paths = [];
+            var data = "";
+            this.pieces.forEach((p) => {
+               var data = ""
+               var arcs = [];
+               CircleFractalJigsaw.addarcs(p[0], p, arcs, crad, border, true);
+               data += "M" + arcs[0].sp.x + "," + arcs[0].sp.y + " ";
+               arcs.forEach((a) => {
+                  data += "A " + crad + " " + crad + " 0 0," + a.sign + " " + a.ep.x + " " + a.ep.y + " ";
+               });
+               data += "Z"
+               paths.push(data);
+            });
+            return paths;
+         }
+
+         drawgrid(border, crad) {
+            var centers = [];
+            for (var i = 0; i < this.grid.ncol; i++) {
+               for (var j = 0; j < this.grid.nrow; j++) {
+                  var a = new HexArc(i, j, rad, border, 0, 1);
+                  centers.push(a.cp);
+               }
+            }
+            return centers;
+         }
+
+         generate() {
+            while (this.grid.nunvisited) {
+               this.createpiece();
+            }
+            this.regenerategrid();
+         }
+         npieces() {
+            return this.pieces.length;
+         }
+         regenerategrid() {
+            this.grid.reset()
+            var np = 1;
+            this.pieces.forEach((p) => {
+               p.forEach((c) => {
+                  this.grid.visittile(c.p1);
+                  this.grid.visittile(c.p2);
+
+               });
+               np++;
+            });
+         }
+      }
+
+
+      // save function pieced together from here: https://stackoverflow.com/questions/19327749/javascript-blob-filename-without-link
+      function save(filename, data) {
+         var blob = new Blob([data], { type: "text/csv" });
+         if (window.navigator.msSaveOrOpenBlob) {
+            window.navigator.msSaveBlob(blob, filename);
+         }
+         else {
+            var elem = window.document.createElement('a');
+            elem.href = window.URL.createObjectURL(blob);
+            elem.download = filename;
+            document.body.appendChild(elem);
+            elem.click();
+            document.body.removeChild(elem);
+         }
+      }
+
+
+
+      function parse_input() {
+         seed = parseInt($("seed").value);
+         ncols = parseInt($("ncols").value);
+         nrows = parseInt($("nrows").value);
+         frame = parseFloat($("frame").value);
+         framecorner = parseFloat($("framecorner").value);
+         rad = parseFloat($("cradius").value);
+         minp = parseInt($("minpsize").value);
+         maxp = parseInt($("maxpsize").value);
+      }
+
+
+      function update() {
+         parse_input();
+         $("width").innerHTML = ncols * 2 * rad + 2 * frame;
+         $("height").innerHTML = nrows * 2 * rad + 2 * frame;
+      }
+      function savesvg(mode) {
+         switch (mode) {
+            case 0:
+               save("jigsaw.svg", jig.exportsvg(frame, rad));
+               break;
+            case 1:
+               save("jigsaw.svg", jig.exportsvg_nooverlap(frame, rad));
+               break;
+            case 2:
+               save("jigsaw.svg", jig.exportsvg_nooverlap_singlepath(frame, rad));
+               break;
+         }
+
+      }
+
+      function createframe() {
+         var width = ncols * 2 * rad + 2 * frame;
+         var height = nrows * 2 * rad + 2 * frame;
+
+         var data = "M" + framecorner + "," + 0 + " ";
+         data += "H " + (width - framecorner);
+         if (framecorner > 0) {
+            data += "A " + framecorner + " " + framecorner + " 0 0,1 " + width + " " + framecorner + " ";
+         }
+
+         data += "V " + (height - framecorner);
+         if (framecorner > 0) {
+            data += "A " + framecorner + " " + framecorner + " 0 0,1 " + (width - framecorner) + " " + height + " ";
+         }
+
+         data += "H " + (framecorner);
+         if (framecorner > 0) {
+            data += "A " + framecorner + " " + framecorner + " 0 0,1 " + 0 + " " + (height - framecorner) + " ";
+         }
+
+         data += "V " + (framecorner);
+         if (framecorner > 0) {
+            data += "A " + framecorner + " " + framecorner + " 0 0,1 " + (framecorner) + " " + 0 + " ";
+         }
+
+         data += "Z";
+         return data;
+      }
+
+      function generate() {
+         parse_input();
+         jig = new CircleFractalJigsaw(ncols, nrows, minp, maxp);
+
+         //jig.generate();
+         // while (jig.fillholes(false));
+         // jig.fillholes(true);
+
+         $("puzzlecontainer").setAttribute("width", ncols * 2 * rad + 2 * frame);
+         $("puzzlecontainer").setAttribute("height", nrows * 2 * rad + 2 * frame);
+
+         while ($("puzzlecontainer").firstChild) {
+            $("puzzlecontainer").removeChild($("puzzlecontainer").firstChild);
+         }
+         jig.drawgrid(frame, rad).forEach((c) => {
+            var circle = document.createElementNS($("puzzlecontainer").namespaceURI, "circle")
+            circle.setAttribute("cx", c.x);
+            circle.setAttribute("cy", c.y);
+            circle.setAttribute("r", rad);
+            circle.setAttribute("stroke", "gray");
+            circle.setAttribute("fill", "none");
+            $("puzzlecontainer").appendChild(circle);
+         });
+         jig.multipaths(frame, rad).forEach((p) => {
+            var newpath = document.createElementNS($("puzzlecontainer").namespaceURI, "path")
+            newpath.setAttribute("d", p);
+            newpath.setAttribute("stroke", "black");
+            newpath.setAttribute("stroke-width", rad / 20.0);
+            newpath.setAttribute("fill", "#" + Math.floor(uniform(0, 16777216)).toString(16));
+            $("puzzlecontainer").appendChild(newpath);
+         });
+         var framedraw = document.createElementNS($("puzzlecontainer").namespaceURI, "path")
+         framedraw.setAttribute("d", createframe());
+         framedraw.setAttribute("stroke", "black");
+         framedraw.setAttribute("fill", "none");
+         framedraw.setAttribute("stroke-width", 0.5);
+         $("puzzlecontainer").appendChild(framedraw);
+         $("piececount").innerHTML = jig.npieces();
+      }
+   </script>
+</head>
+
+
+<body onload="$('seed').value = Math.random() * 10000; updateseed();">
+   <table>
+      <tr>
+         <td>Seed:</td>
+         <td><input id="_seed" type="text" value="0" onchange="update_seed()" /></td>
+         <td><input id="seed" type="range" value="0" min="0" max="9999" step="1" onchange="updateseed()" /></td>
+      </tr>
+      <tr>
+         <td>Coulmns:</td>
+         <td><input id="_ncols" type="text" value="20" onchange="update_ncols()" /></td>
+         <td><input id="ncols" type="range" value="20" min="2" max="250" step="1" onchange="updatencols()" /></td>
+      </tr>
+      <tr>
+         <td>Rows:</td>
+         <td><input id="_nrows" type="text" value="20" onchange="update_nrows()" /></td>
+         <td><input id="nrows" type="range" value="20" min="2" max="250" step="1" onchange="updatenrows()" /></td>
+      </tr>
+      <tr>
+         <td>Circle Radius:</td>
+         <td><input id="cradius" type="text" value="6.0" size="4" onchange="update()" /> mm</td>
+         <td></td>
+      </tr>
+      <tr>
+         <td>Frame size:</td>
+         <td><input id="frame" type="text" value="6.0" size="4" onchange="update()" /> mm</td>
+         <td></td>
+      </tr>
+      <tr>
+         <td>Frame corner radius:</td>
+         <td><input id="framecorner" type="text" value="4.0" size="4" onchange="update()" /> mm</td>
+         <td></td>
+      </tr>
+      <tr>
+         <td>Minimum pieze size:</td>
+         <td><input id="minpsize" type="text" value="4" size="4" onchange="update()" /> tiles</td>
+         <td></td>
+      </tr>
+      <tr>
+         <td>Maximum piece size:</td>
+         <td><input id="maxpsize" type="text" value="50" size="4" onchange="update()" /> tiles</td>
+         <td></td>
+      </tr>
+      <tr>
+         <td>Jigsaw size: <label id="width">w</label> x <label id="height">h</label> mm</td>
+      </tr>
+
+      <tr>
+         <td><button onclick="generate()">Generate Jigsaw</button></td>
+         <td><button onclick="savesvg(0)">Download SVG (individual pieces, overlap)</button></td>
+         <td><button onclick="savesvg(1)">Download SVG (non-overlapping vectors)</button></td>
+         <td><button onclick="savesvg(2)">Download SVG (non-overlapping vectors, single path)</button></td>
+      </tr>
+   </table>
+   <svg id="puzzlecontainer">
+      <!-- <path id="puzzlepath" fill="none" stroke="Black"></path> -->
+   </svg>
+   <table>
+      <tr>
+         <td>This jigsaw has: <label id="piececount">0</label> pieces</td>
+      </tr>
+   </table>
+</body>
+
+</html>
