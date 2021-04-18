@@ -202,19 +202,19 @@
             this.minpiecelen = minpiecelen;
          }
 
-         possibleconnections(mytiles) {
+         possibleconnections(tilestocheck,allpiecetiles) {
             var pcs = [];
 
-            mytiles.forEach((v) => {
+            tilestocheck.forEach((v) => {
                if (v.hasconnections) {
                   v.hasconnections = false;
                   for (var i = 0; i < 6; i++) {
                      var cc = DiagonalConnection.FromPointAndSextant(v, i);
-                     if (this.grid.istilevalid(cc.p2) && !mytiles.find(nv => nv.eq(cc.p2)) && !this.grid.istilevisited(cc.p2)) {
+                     if (this.grid.istilevalid(cc.p2) && !allpiecetiles.find(nv => nv.eq(cc.p2)) && !this.grid.istilevisited(cc.p2)) {
                         var validconnection = true;
                         for (var j = 0; j < 6; j++) {
                            var ncc = DiagonalConnection.FromPointAndSextant(cc.p2, j);
-                           if (!ncc.p2.eq(v) && mytiles.find(nv => nv.eq(ncc.p2))) {
+                           if (!ncc.p2.eq(v) && allpiecetiles.find(nv => nv.eq(ncc.p2))) {
                               validconnection = false;
                            }
                         }
@@ -239,7 +239,7 @@
 
 
             while (this.grid.nunvisited > 0 && mytiles.length < targetpiecelen) {
-               var possibleconnections = this.possibleconnections(mytiles, false);
+               var possibleconnections = this.possibleconnections(mytiles,mytiles);
                if (possibleconnections.length == 0) {
                   break;
                }
@@ -263,7 +263,7 @@
                   tiles.push(con.p2);
                });
                tiles.forEach((v) => {
-                  var possibleconnections = this.possibleconnections([v]);
+                  var possibleconnections = this.possibleconnections([v],tiles);
                   if (possibleconnections.length) {
                      possibleconnections = possibleconnections.filter(function (ele) {
                         return !Boolean(tiles.find(vf => vf.eq(ele.p2)));
@@ -583,7 +583,7 @@
          jig = new CircleFractalJigsaw(ncols, nrows/2, minp, maxp);
 
          jig.generate();
-         //while(jig.fillholes());
+         while(jig.fillholes());
          $("puzzlecontainer").setAttribute("width", getwidth(rad, frame));
          $("puzzlecontainer").setAttribute("height", getheight(rad, frame));
 
